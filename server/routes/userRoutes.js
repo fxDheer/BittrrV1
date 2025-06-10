@@ -1,0 +1,219 @@
+const express = require('express');
+const router = express.Router();
+const { auth, generateToken } = require('../middleware/auth');
+const User = require('../models/User');
+const multer = require('multer');
+const path = require('path');
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (extname && mimetype) {
+      return cb(null, true);
+    }
+    cb(new Error('Only .png, .jpg and .jpeg format allowed!'));
+  },
+});
+
+// Register new user
+router.post('/register', async (req, res) => {
+  try {
+    const { email, password, name, dateOfBirth, gender, lookingFor } = req.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already registered' });
+    }
+
+    // Create new user
+    const user = new User({
+      email,
+      password,
+      name,
+      dateOfBirth,
+      gender,
+      lookingFor,
+    });
+
+    await user.save();
+    const token = generateToken(user._id);
+
+    res.status(201).json({
+      token,
+      user: user.getPublicProfile(),
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Login user
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user || !(await user.comparePassword(password))) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    const token = generateToken(user._id);
+    res.json({
+      token,
+      user: user.getPublicProfile(),
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get user profile
+router.get('/profile', auth, async (req, res) => {
+  try {
+    res.json(req.user.getPublicProfile());
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Update user profile
+router.patch('/profile', auth, async (req, res) => {
+  const updates = Object.keys(req.body);
+  const allowedUpdates = ['name', 'bio', 'interests', 'preferences'];
+  const isValidOperation = updates.every(update => allowedUpdates.includes(update));
+
+  if (!isValidOperation) {
+    return res.status(400).json({ message: 'Invalid updates' });
+  }
+
+  try {
+    updates.forEach(update => req.user[update] = req.body[update]);
+    await req.user.save();
+    res.json(req.user.getPublicProfile());
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Upload profile photo
+router.post('/profile/photo', auth, upload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    req.user.photos.push({
+      url: `/uploads/${req.file.filename}`,
+      isVerified: false,
+    });
+
+    await req.user.save();
+    res.json(req.user.getPublicProfile());
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Update location
+router.post('/location', auth, async (req, res) => {
+  try {
+    const { coordinates } = req.body;
+    req.user.location.coordinates = coordinates;
+    await req.user.save();
+    res.json(req.user.getPublicProfile());
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get potential matches
+router.get('/discover', auth, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const query = {
+      _id: { $ne: req.user._id },
+      gender: req.user.lookingFor === 'both' ? { $in: ['male', 'female'] } : req.user.lookingFor,
+      lookingFor: { $in: [req.user.gender, 'both'] },
+      'location.coordinates': {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: req.user.location.coordinates,
+          },
+          $maxDistance: req.user.preferences.distance * 1000, // Convert km to meters
+        },
+      },
+    };
+
+    const users = await User.find(query)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .select('name photos bio interests location lastActive');
+
+    res.json(users);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Like a user
+router.post('/like/:userId', auth, async (req, res) => {
+  try {
+    const likedUser = await User.findById(req.params.userId);
+    if (!likedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if already liked
+    if (req.user.likes.includes(req.params.userId)) {
+      return res.status(400).json({ message: 'Already liked this user' });
+    }
+
+    req.user.likes.push(req.params.userId);
+    await req.user.save();
+
+    // Check for match
+    if (likedUser.likes.includes(req.user._id)) {
+      req.user.matches.push(req.params.userId);
+      likedUser.matches.push(req.user._id);
+      await Promise.all([req.user.save(), likedUser.save()]);
+      return res.json({ message: 'It\'s a match!', isMatch: true });
+    }
+
+    res.json({ message: 'User liked successfully', isMatch: false });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get matches
+router.get('/matches', auth, async (req, res) => {
+  try {
+    const matches = await User.find({ _id: { $in: req.user.matches } })
+      .select('name photos lastActive');
+    res.json(matches);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+module.exports = router; 
