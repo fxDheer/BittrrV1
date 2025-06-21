@@ -3,6 +3,8 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const SearchFilter = require('../models/SearchFilter');
 const User = require('../models/User');
+const Block = require('../models/Block');
+const SearchHistory = require('../models/SearchHistory');
 
 // Get user's search filters
 router.get('/filters', auth, async (req, res) => {

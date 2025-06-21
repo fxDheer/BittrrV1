@@ -1,0 +1,39 @@
+{
+  "aws": {
+    "region": "us-east-1",
+    "services": {
+      "ec2": {
+        "instanceType": "t2.micro",
+        "ami": "ami-0c55b159cbfafe1f0",
+        "securityGroups": ["bittrr-sg"],
+        "keyName": "bittrr-key"
+      },
+      "s3": {
+        "bucketName": "bittrr-frontend",
+        "website": {
+          "indexDocument": "index.html",
+          "errorDocument": "index.html"
+        }
+      },
+      "cloudfront": {
+        "distribution": {
+          "enabled": true,
+          "defaultCacheBehavior": {
+            "viewerProtocolPolicy": "redirect-to-https",
+            "allowedMethods": ["GET", "HEAD"],
+            "cachedMethods": ["GET", "HEAD"],
+            "forwardedValues": {
+              "queryString": false,
+              "cookies": {
+                "forward": "none"
+              }
+            },
+            "minTTL": 0,
+            "defaultTTL": 86400,
+            "maxTTL": 31536000
+          }
+        }
+      }
+    }
+  }
+} 
