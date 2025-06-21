@@ -7,7 +7,7 @@ const Block = require('../models/Block');
 const SearchHistory = require('../models/SearchHistory');
 
 // Get user's search filters
-router.get('/filters', auth, async (req, res) => {
+router.get('/filters/user', auth, async (req, res) => {
   try {
     const filter = await SearchFilter.getFilter(req.user._id);
     if (!filter) {
