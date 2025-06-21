@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 const { validate } = require('../middleware/validator');
 const { apiLimiter } = require('../middleware/rateLimiter');
 const Call = require('../models/Call');
