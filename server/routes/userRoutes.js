@@ -216,4 +216,36 @@ router.get('/matches', auth, async (req, res) => {
   }
 });
 
+// --- PUBLIC ROUTES ---
+
+// Get a list of users for public homepage
+router.get('/public/discover', async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const users = await User.find({})
+      .skip(skip)
+      .limit(parseInt(limit))
+      .select('name photos bio interests');
+
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching users for discovery' });
+  }
+});
+
+// Get a single user profile publicly
+router.get('/public/profile/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId).select('-password -email');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json(user.getPublicProfile());
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching user profile' });
+  }
+});
+
 module.exports = router; 

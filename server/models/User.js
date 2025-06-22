@@ -11,8 +11,16 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
+    required: function() {
+      // Password is required only if user is not using OAuth
+      return !this.googleId;
+    },
     minlength: 6,
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true, // Allows multiple null values
   },
   name: {
     type: String,
@@ -21,16 +29,25 @@ const userSchema = new mongoose.Schema({
   },
   dateOfBirth: {
     type: Date,
-    required: true,
+    required: function() {
+      // Date of birth is required only for non-OAuth users
+      return !this.googleId;
+    },
   },
   gender: {
     type: String,
-    required: true,
+    required: function() {
+      // Gender is required only for non-OAuth users
+      return !this.googleId;
+    },
     enum: ['male', 'female', 'other'],
   },
   lookingFor: {
     type: String,
-    required: true,
+    required: function() {
+      // Looking for is required only for non-OAuth users
+      return !this.googleId;
+    },
     enum: ['male', 'female', 'both'],
   },
   bio: {
@@ -79,6 +96,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  isEmailVerified: {
+    type: Boolean,
+    default: false,
+  },
   isAdmin: {
     type: Boolean,
     default: false,
@@ -106,9 +127,9 @@ const userSchema = new mongoose.Schema({
 // Index for geospatial queries
 userSchema.index({ location: '2dsphere' });
 
-// Hash password before saving
+// Hash password before saving (only if password exists and is modified)
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
+  if (!this.isModified('password') || !this.password) return next();
   
   try {
     const salt = await bcrypt.genSalt(10);
@@ -121,6 +142,7 @@ userSchema.pre('save', async function(next) {
 
 // Method to compare password
 userSchema.methods.comparePassword = async function(candidatePassword) {
+  if (!this.password) return false; // OAuth users don't have passwords
   return bcrypt.compare(candidatePassword, this.password);
 };
 

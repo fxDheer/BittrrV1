@@ -5,8 +5,11 @@ const dotenv = require('dotenv');
 const http = require('http');
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
+const passport = require('passport');
+const session = require('express-session');
 const userRoutes = require('./routes/userRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const authRoutes = require('./routes/authRoutes');
 const User = require('./models/User');
 const path = require('path');
 const Block = require('./models/Block');
@@ -40,6 +43,21 @@ const io = socketIo(server, {
     credentials: true
   }
 });
+
+// Session middleware (required for Passport)
+app.use(session({
+  secret: process.env.JWT_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Middleware
 app.use(express.json());
@@ -314,6 +332,7 @@ io.on('connection', (socket) => {
 // Routes
 app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
@@ -325,6 +344,57 @@ app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/matches', require('./routes/matchRoutes'));
 app.use('/api/stories', require('./routes/storyRoutes'));
 app.use('/api/calls', require('./routes/callRoutes'));
+
+// Public routes (no authentication required)
+app.get('/api/public/users', async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
+
+    // Get public user profiles (basic info only)
+    const users = await User.find({ 
+      isVerified: true, // Only show verified users
+      'photos.0': { $exists: true } // Only show users with at least one photo
+    })
+    .skip(skip)
+    .limit(parseInt(limit))
+    .select('name photos bio interests location lastActive age gender lookingFor')
+    .sort({ lastActive: -1 }); // Most recent first
+
+    res.json({
+      users,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total: await User.countDocuments({ 
+        isVerified: true, 
+        'photos.0': { $exists: true } 
+      })
+    });
+  } catch (error) {
+    console.error('Error fetching public users:', error);
+    res.status(500).json({ message: 'Failed to fetch users' });
+  }
+});
+
+app.get('/api/public/users/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+      .select('name photos bio interests location lastActive age gender lookingFor isVerified');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.isVerified) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error('Error fetching public user profile:', error);
+    res.status(500).json({ message: 'Failed to fetch user profile' });
+  }
+});
 
 // Basic route
 app.get('/', (req, res) => {
