@@ -47,6 +47,11 @@ blockSchema.statics.getBlockedUsers = async function(userId) {
     .sort({ createdAt: -1 });
 };
 
+// Static method to get all blocked users for a user (alias for getBlockedUsers)
+blockSchema.statics.findBlockedUsers = async function(userId) {
+  return this.getBlockedUsers(userId);
+};
+
 // Static method to get all users who blocked a user
 blockSchema.statics.getBlockedBy = async function(userId) {
   return this.find({ blocked: userId })

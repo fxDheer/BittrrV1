@@ -91,10 +91,13 @@ matchPreferenceSchema.pre('save', function(next) {
 matchPreferenceSchema.index({ location: '2dsphere' });
 
 // Static method to find potential matches
-matchPreferenceSchema.statics.findPotentialMatches = async function(userId, limit = 20) {
-  const userPrefs = await this.findOne({ user: userId });
-  if (!userPrefs) {
-    throw new Error('User preferences not found');
+matchPreferenceSchema.statics.findPotentialMatches = async function(userId, preferences, skip = 0, limit = 20) {
+  if (!preferences) {
+    const userPrefs = await this.findOne({ user: userId });
+    if (!userPrefs) {
+      throw new Error('User preferences not found');
+    }
+    preferences = userPrefs;
   }
 
   const query = {
@@ -104,25 +107,26 @@ matchPreferenceSchema.statics.findPotentialMatches = async function(userId, limi
       $near: {
         $geometry: {
           type: 'Point',
-          coordinates: userPrefs.location.coordinates
+          coordinates: preferences.location.coordinates
         },
-        $maxDistance: userPrefs.distance * 1000 // Convert km to meters
+        $maxDistance: preferences.distance * 1000 // Convert km to meters
       }
     }
   };
 
   // Add gender filter if specified
-  if (userPrefs.gender !== 'all') {
-    query.gender = userPrefs.gender;
+  if (preferences.gender !== 'all') {
+    query.gender = preferences.gender;
   }
 
   // Add age range filter
   query.age = {
-    $gte: userPrefs.ageRange.min,
-    $lte: userPrefs.ageRange.max
+    $gte: preferences.ageRange.min,
+    $lte: preferences.ageRange.max
   };
 
   return this.find(query)
+    .skip(skip)
     .limit(limit)
     .populate('user', 'name photos bio interests')
     .sort({ lastActive: -1 });

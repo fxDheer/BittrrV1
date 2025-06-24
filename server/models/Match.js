@@ -74,6 +74,29 @@ matchSchema.statics.addLike = async function(matchId, userId) {
   return match.save();
 };
 
+matchSchema.statics.addDislike = async function(matchId, userId) {
+  const match = await this.findById(matchId);
+  if (!match) return null;
+
+  // For dislike, we just update the status to rejected
+  match.status = 'rejected';
+  match.lastInteraction = new Date();
+  return match.save();
+};
+
+matchSchema.statics.addSuperLike = async function(matchId, userId) {
+  const match = await this.findById(matchId);
+  if (!match) return null;
+
+  const existingLike = match.likes.find(like => like.user.toString() === userId.toString());
+  if (existingLike) return match;
+
+  // Super like is treated as a regular like but with higher priority
+  match.likes.push({ user: userId });
+  match.lastInteraction = new Date();
+  return match.save();
+};
+
 matchSchema.statics.updateStatus = async function(matchId, status) {
   return this.findByIdAndUpdate(
     matchId,
