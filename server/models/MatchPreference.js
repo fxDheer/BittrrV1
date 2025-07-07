@@ -133,11 +133,20 @@ matchPreferenceSchema.statics.findPotentialMatches = async function(userId, pref
 };
 
 // Static method to calculate match score
-matchPreferenceSchema.statics.calculateMatchScore = async function(userId1, userId2) {
-  const [prefs1, prefs2] = await Promise.all([
-    this.findOne({ user: userId1 }),
-    this.findOne({ user: userId2 })
-  ]);
+matchPreferenceSchema.statics.calculateMatchScore = async function(prefs1, prefs2) {
+  // If userIds are passed instead of preferences, fetch them
+  if (typeof prefs1 === 'string' && typeof prefs2 === 'string') {
+    const [userPrefs1, userPrefs2] = await Promise.all([
+      this.findOne({ user: prefs1 }),
+      this.findOne({ user: prefs2 })
+    ]);
+
+    if (!userPrefs1 || !userPrefs2) {
+      throw new Error('User preferences not found');
+    }
+    prefs1 = userPrefs1;
+    prefs2 = userPrefs2;
+  }
 
   if (!prefs1 || !prefs2) {
     throw new Error('User preferences not found');

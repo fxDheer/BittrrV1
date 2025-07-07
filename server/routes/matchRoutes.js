@@ -250,140 +250,15 @@ router.patch('/active', auth, async (req, res) => {
   }
 });
 
-// Get potential matches (alias for /discover)
-router.get('/potential', auth, apiLimiter, async (req, res) => {
+// Get potential matches (simple version: all users except self)
+router.get('/potential', auth, async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
-    const skip = (page - 1) * limit;
-
-    // Get user's preferences
-    const preferences = await MatchPreference.findOne({ user: req.user._id });
-    if (!preferences) {
-      return res.status(404).json({ message: 'Match preferences not found' });
-    }
-
-    // Get potential matches
-    const potentialMatches = await MatchPreference.findPotentialMatches(
-      req.user._id,
-      preferences,
-      skip,
-      parseInt(limit)
-    );
-
-    // Get blocked users
-    const blockedUsers = await Block.findBlockedUsers(req.user._id);
-    const blockedUserIds = blockedUsers.map(block => 
-      block.blocker.toString() === req.user._id.toString() 
-        ? block.blocked 
-        : block.blocker
-    );
-
-    // Filter out blocked users and calculate match scores
-    const matches = potentialMatches
-      .filter(match => !blockedUserIds.includes(match.user._id.toString()))
-      .map(match => ({
-        ...match.toObject(),
-        matchScore: MatchPreference.calculateMatchScore(preferences, match)
-      }))
-      .sort((a, b) => b.matchScore - a.matchScore);
-
-    res.json({
-      matches,
-      page: parseInt(page),
-      limit: parseInt(limit),
-      hasMore: matches.length === parseInt(limit)
-    });
+    const users = await require('../models/User').find({ _id: { $ne: req.user._id } })
+      .select('name photos bio interests location lastActive')
+      .limit(20);
+    res.json(users);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching potential matches' });
-  }
-});
-
-// Dislike a user (alias for reject)
-router.post('/dislike/:userId', auth, apiLimiter, async (req, res) => {
-  try {
-    const { userId } = req.params;
-    
-    // Check if users exist
-    const [user1, user2] = await Promise.all([
-      User.findById(req.user._id),
-      User.findById(userId)
-    ]);
-
-    if (!user1 || !user2) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Check if either user has blocked the other
-    const isBlocked = await Block.isBlocked(req.user._id, userId);
-    if (isBlocked) {
-      return res.status(403).json({ message: 'Cannot dislike blocked user' });
-    }
-
-    // Find existing match
-    let match = await Match.findMatch(req.user._id, userId);
-
-    if (!match) {
-      // Create new match with dislike
-      match = await Match.createMatch(req.user._id, userId);
-      match = await Match.addDislike(match._id, req.user._id);
-    } else {
-      // Add dislike to existing match
-      match = await Match.addDislike(match._id, req.user._id);
-    }
-
-    res.json(match);
-  } catch (error) {
-    res.status(500).json({ message: 'Error processing dislike' });
-  }
-});
-
-// Super like a user
-router.post('/super-like/:userId', auth, apiLimiter, async (req, res) => {
-  try {
-    const { userId } = req.params;
-    
-    // Check if users exist
-    const [user1, user2] = await Promise.all([
-      User.findById(req.user._id),
-      User.findById(userId)
-    ]);
-
-    if (!user1 || !user2) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Check if either user has blocked the other
-    const isBlocked = await Block.isBlocked(req.user._id, userId);
-    if (isBlocked) {
-      return res.status(403).json({ message: 'Cannot super-like blocked user' });
-    }
-
-    // Find existing match
-    let match = await Match.findMatch(req.user._id, userId);
-
-    if (!match) {
-      // Create new match with super-like
-      match = await Match.createMatch(req.user._id, userId);
-      match = await Match.addSuperLike(match._id, req.user._id);
-    } else {
-      // Add super-like to existing match
-      match = await Match.addSuperLike(match._id, req.user._id);
-    }
-
-    // Check if it's a mutual match (super-likes count as likes)
-    if (match.likes.length === 2) {
-      match = await Match.updateStatus(match._id, 'matched');
-      
-      // Emit match event to both users
-      req.app.get('io').to([req.user._id.toString(), userId]).emit('newMatch', {
-        matchId: match._id,
-        users: [user1, user2]
-      });
-    }
-
-    res.json(match);
-  } catch (error) {
-    res.status(500).json({ message: 'Error processing super-like' });
+    res.status(400).json({ message: error.message });
   }
 });
 

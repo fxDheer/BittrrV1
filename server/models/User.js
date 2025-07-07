@@ -27,12 +27,23 @@ const userSchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+  age: {
+    type: Number,
+    min: 18,
+    max: 100,
+  },
   dateOfBirth: {
     type: Date,
     required: function() {
       // Date of birth is required only for non-OAuth users
       return !this.googleId;
     },
+    default: function() {
+      // Default to 25 years old if not provided
+      const date = new Date();
+      date.setFullYear(date.getFullYear() - 25);
+      return date;
+    }
   },
   gender: {
     type: String,
@@ -41,6 +52,7 @@ const userSchema = new mongoose.Schema({
       return !this.googleId;
     },
     enum: ['male', 'female', 'other'],
+    default: 'other'
   },
   lookingFor: {
     type: String,
@@ -49,6 +61,7 @@ const userSchema = new mongoose.Schema({
       return !this.googleId;
     },
     enum: ['male', 'female', 'both'],
+    default: 'both'
   },
   bio: {
     type: String,
@@ -71,6 +84,8 @@ const userSchema = new mongoose.Schema({
       type: [Number],
       default: [0, 0],
     },
+    city: String,
+    country: String,
   },
   interests: [{
     type: String,
@@ -149,10 +164,36 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 // Method to get public profile (excluding sensitive data)
 userSchema.methods.getPublicProfile = function() {
   const userObject = this.toObject();
+  
+  // Remove sensitive data
   delete userObject.password;
   delete userObject.email;
   delete userObject.blockedUsers;
   delete userObject.isAdmin;
+  
+  // Ensure required fields exist for frontend compatibility
+  if (!userObject.location) {
+    userObject.location = { city: '', country: '' };
+  }
+  if (!userObject.interests) {
+    userObject.interests = [];
+  }
+  if (!userObject.photos) {
+    userObject.photos = [];
+  }
+  if (!userObject.bio) {
+    userObject.bio = '';
+  }
+  
+  // Convert relative image URLs to full URLs
+  const baseUrl = process.env.BASE_URL || 'http://13.49.73.45:5000';
+  if (userObject.photos && userObject.photos.length > 0) {
+    userObject.photos = userObject.photos.map(photo => ({
+      ...photo,
+      url: photo.url.startsWith('http') ? photo.url : `${baseUrl}${photo.url}`
+    }));
+  }
+  
   return userObject;
 };
 

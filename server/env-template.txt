@@ -1,0 +1,19 @@
+# Email Configuration Template
+# Copy this file to .env and replace with your actual values
+
+# Gmail Email Configuration
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASSWORD=your-16-character-app-password
+
+# Instructions:
+# 1. Replace 'your-email@gmail.com' with your actual Gmail address
+# 2. Replace 'your-16-character-app-password' with your Gmail App Password
+# 3. Save this file as '.env' in the server directory
+# 4. Make sure to enable 2-Factor Authentication on your Gmail account first
+# 5. Generate an App Password in Gmail settings (not your regular password)
+
+# Other environment variables you might need:
+# MONGODB_URI=your-mongodb-connection-string
+# JWT_SECRET=your-jwt-secret
+# GOOGLE_CLIENT_ID=your-google-oauth-client-id
+# GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret 

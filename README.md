@@ -1,5 +1,15 @@
 # Bittrr - Modern Dating Web App
 
+**Project Structure & Workflow (2024 Update)**
+
+- All frontend code is in `client/` (React, for S3/CloudFront deployment)
+- All backend code is in `server/` (Node.js/Express, for EC2 deployment)
+- No code is used from any other folders (e.g., BittrrV1/ is obsolete)
+- All development, commits, and deployments should use only these two folders
+- Deployment scripts and documentation reference only `client/` and `server/`
+
+---
+
 Bittrr is a modern dating web application built with React, Node.js, and MongoDB. It features a beautiful UI, real-time chat, and smart matching algorithms.
 
 ## Features

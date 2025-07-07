@@ -95,20 +95,79 @@ router.get('/profile', auth, async (req, res) => {
 
 // Update user profile
 router.patch('/profile', auth, async (req, res) => {
+  console.log('=== PROFILE UPDATE REQUEST ===');
+  console.log('User ID:', req.user._id);
+  console.log('Request body:', JSON.stringify(req.body, null, 2));
+  console.log('Request headers:', JSON.stringify(req.headers, null, 2));
+  
   const updates = Object.keys(req.body);
-  const allowedUpdates = ['name', 'bio', 'interests', 'preferences'];
+  const allowedUpdates = [
+    'name', 
+    'bio', 
+    'interests', 
+    'preferences',
+    'dateOfBirth',
+    'gender',
+    'lookingFor',
+    'city',
+    'country',
+    'occupation',
+    'education'
+  ];
+  
+  console.log('Received updates:', updates);
+  console.log('Allowed updates:', allowedUpdates);
+  
   const isValidOperation = updates.every(update => allowedUpdates.includes(update));
+  console.log('Is valid operation:', isValidOperation);
 
   if (!isValidOperation) {
-    return res.status(400).json({ message: 'Invalid updates' });
+    const invalidUpdates = updates.filter(update => !allowedUpdates.includes(update));
+    console.log('Invalid updates:', invalidUpdates);
+    return res.status(400).json({ 
+      message: 'Invalid updates', 
+      allowedUpdates,
+      receivedUpdates: updates,
+      invalidUpdates
+    });
   }
 
   try {
-    updates.forEach(update => req.user[update] = req.body[update]);
+    console.log('Starting profile update...');
+    updates.forEach(update => {
+      if (update === 'city' || update === 'country') {
+        // Handle location updates
+        if (!req.user.location) {
+          req.user.location = {};
+        }
+        req.user.location[update] = req.body[update];
+        console.log(`Updated location.${update}:`, req.body[update]);
+      } else {
+        req.user[update] = req.body[update];
+        console.log(`Updated ${update}:`, req.body[update]);
+      }
+    });
+    
+    console.log('Saving user...');
     await req.user.save();
-    res.json(req.user.getPublicProfile());
+    console.log('User saved successfully');
+    
+    const userProfile = req.user.getPublicProfile();
+    const response = {
+      success: true,
+      message: 'Profile updated successfully',
+      user: userProfile
+    };
+    console.log('Sending response:', JSON.stringify(response, null, 2));
+    res.json(response);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Profile update error:', error);
+    console.error('Error stack:', error.stack);
+    res.status(400).json({ 
+      message: error.message,
+      error: error.toString(),
+      stack: error.stack
+    });
   }
 });
 
@@ -119,8 +178,12 @@ router.post('/profile/photo', auth, upload.single('photo'), async (req, res) => 
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
+    // Create full URL for the uploaded image
+    const baseUrl = process.env.BASE_URL || 'http://13.49.73.45:5000';
+    const imageUrl = `${baseUrl}/uploads/${req.file.filename}`;
+
     req.user.photos.push({
-      url: `/uploads/${req.file.filename}`,
+      url: imageUrl,
       isVerified: false,
     });
 
@@ -245,6 +308,28 @@ router.get('/public/profile/:userId', async (req, res) => {
     res.json(user.getPublicProfile());
   } catch (error) {
     res.status(500).json({ message: 'Error fetching user profile' });
+  }
+});
+
+// Debug endpoint to check users in database
+router.get('/debug/users', async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const recentUsers = await User.find({})
+      .select('name email gender lookingFor bio interests photos createdAt')
+      .sort({ createdAt: -1 })
+      .limit(10);
+    
+    res.json({
+      totalUsers,
+      recentUsers,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: 'Error fetching debug info',
+      error: error.message 
+    });
   }
 });
 
